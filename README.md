@@ -1,148 +1,125 @@
-# WTI–Brent Pairs Trading Strategy
+# WTI–Brent Pairs Trading Strategy (6811finalproject.py & Final_code_fre.ipynb)
 
-This repository implements a **pairs trading** strategy between **WTI** and **Brent** crude oil futures using spread mean reversion with **regime switching**. The pipeline builds a z‑scored spread, classifies market regimes with a **Gaussian Hidden Markov Model (HMM)**, and generates long/short signals with regime‑dependent thresholds. It then backtests PnL and reports performance (e.g., **Sharpe ratio**).
+This project implements a **pairs trading** strategy between **WTI** and **Brent crude oil futures** using a spread mean-reversion framework with potential extensions for volatility modeling and regime detection. Both the Python script (`6811finalproject.py`) and the Jupyter notebook (`Final_code_fre.ipynb`) contain equivalent methodologies, differing mainly in format (script vs notebook).
 
-> **Files used by the script**
-> - `finalproject.py` – main script
-> - `WTIData.csv`, `BrentData.csv` – input price data (PX_LAST and active ticker columns expected)
+## Project Overview
 
----
+The project aims to identify and exploit mean-reverting behavior in the **WTI–Brent spread**. It tests whether short-term deviations between the two highly correlated crude oil benchmarks can be traded profitably through a **statistical arbitrage** framework.
 
-## ## Project Overview
 
-- **Goal**: Exploit mean reversion in the **WTI–Brent spread** while adapting to changing market conditions via **regimes** (high vs. low dependency).
-- **Approach**:  
-  1) Build spread = WTI − Brent,  
-  2) Standardize to z‑scores,  
-  3) Fit a 2‑state **GaussianHMM** on the spread z‑score,  
-  4) Trade when the spread deviates from zero by regime‑dependent thresholds,  
-  5) Backtest and compute performance metrics.
+### Approach
+1. Collect and preprocess historical price data for WTI and Brent futures.
+2. Compute the **spread** and **z-score normalization**.
+3. Identify trading signals when the z-score deviates significantly from zero.
+4. Backtest the strategy, accounting for position changes, transaction costs, and daily returns.
+5. Evaluate performance using metrics like Sharpe ratio, cumulative PnL, and portfolio value.
 
----
+## Data Requirements
 
-## ## Data Requirements
+The project expects two input files:
+| File | Required Columns | Description |
+|------|------------------|--------------|
+| `WTIData.csv` | `Date`, `PX_LAST`, `FUT_CUR_GEN_TICKER` | WTI front-month or active crude oil futures prices |
+| `BrentData.csv` | `Date`, `PX_LAST`, `FUT_CUR_GEN_TICKER` | Brent front-month or active crude oil futures prices |
 
-The script expects two CSVs in the working directory:
+Data should include daily prices and be formatted with consistent date indexes. Missing values are forward-filled. Data is filtered to start from **2021-01-01** or later.
 
-| File          | Required Columns                              | Notes                                   |
-|---------------|-----------------------------------------------|-----------------------------------------|
-| `WTIData.csv` | `Date`, `PX_LAST`, `FUT_CUR_GEN_TICKER`       | Daily WTI front (or active) contract    |
-| `BrentData.csv` | `Date`, `PX_LAST`, `FUT_CUR_GEN_TICKER`     | Daily Brent front (or active) contract  |
+## Methodology
 
-- Dates must be parseable (e.g., `YYYY-MM-DD`).  
-- The script **forward‑fills** missing values and aligns by date, then filters to dates **≥ 2021‑01‑01**.
+### 1. Preprocessing
+- Convert dates to datetime objects and align both datasets by date.
+- Forward-fill missing price data to maintain alignment.
+- Compute the **price spread** (`WTI − Brent`).
 
----
+### 2. Stationarity and Co-Integration
+- The code may optionally perform Augmented Dickey-Fuller (ADF) tests to verify stationarity.
+- A regression of WTI on Brent (`WTI ~ α + β × Brent`) provides hedge ratio insight.
 
-## ## Methodology
+### 3. Z-Score Standardization
+- Compute z-score of the spread to identify deviations from the mean.
+- Z-score is calculated as:
+  ```
+  z = (spread - mean(spread)) / std(spread)
+  ```
 
-### ### 1) Preprocessing
-- Read WTI & Brent CSVs, select columns, convert `Date` to datetime.
-- Forward‑fill prices, align indexes, and compute the **spread**:  
-  \[`Spread` = `WTI` − `Brent`\]
-- Optionally run stationarity checks (ADF) on returns / spread (import is present).
+### 4. Signal Generation
+Trading signals are based on z-score thresholds:
+| Condition | Signal | Position |
+|------------|---------|-----------|
+| z > +2 | Sell Spread | Short WTI / Long Brent |
+| z < -2 | Buy Spread | Long WTI / Short Brent |
+| Otherwise | Hold | No trade |
 
-### ### 2) Linear Relationship (OLS)
-- Fit `WTI ~ α + β × Brent` via **OLS** to understand the co‑movement.
-- Plot price series and the raw spread over time for visual inspection.
+Alternative thresholds (e.g., ±1.5) can be used for more frequent trades.
 
-### ### 3) Returns & Standardization
-- Compute log returns (×100) for each leg and the **return spread**.  
-- Standardize the spread to a **z‑score**:  
-  \[`Spread_z` = zscore(`Spread`)\]
+## Backtesting Logic
 
-### ### 4) Regime Switching (GaussianHMM)
-- Train a **2‑state** `GaussianHMM` on `Spread_z` (diag covariance).  
-- Identify **High** and **Low** dependency regimes by comparing mean `Spread_z` per state.  
-- Add a `Regime` column: `"High"` or `"Low"`.
+The backtest iterates through time, opening or closing positions based on signal changes. Key components include:
+- **Transaction Costs:** Deducted per trade (set as constants per leg).
+- **Position Sizing:** Optionally based on volatility or fixed capital allocation.
+- **Portfolio Tracking:** Tracks cash, open position value, and cumulative portfolio value.
+- **Performance Metrics:** Computes daily returns, Sharpe ratio, and cumulative profit/loss (PnL).
 
-### ### 5) Signal Generation
-Regime‑dependent thresholds (from the script):
+## Performance Evaluation
 
-- **High dependency**:  
-  - `Spread_z` > **+2** ⇒ **Sell Spread** (short WTI / long Brent)  
-  - `Spread_z` < **−2** ⇒ **Buy Spread** (long WTI / short Brent)
-- **Low dependency**:  
-  - `Spread_z` > **+1** ⇒ **Sell Spread**  
-  - `Spread_z` < **−1** ⇒ **Buy Spread**  
-- Otherwise ⇒ **Hold**.
+The strategy computes several key performance indicators:
+- **Final Portfolio Value**
+- **Cumulative and Daily Returns**
+- **Sharpe Ratio** (with optional 3% annual risk-free rate)
+- **Max Drawdown**
+- **Win Rate**
+- **Trade Frequency and Average Holding Period** (if implemented)
 
-### ### 6) Backtesting Logic (Simplified)
-- Iterate chronologically; open/close positions based on `Signal` transitions.  
-- Includes hooks for **position sizing** (`calculate_contracts(...)`) and **transaction costs** (per‑leg constants).  
-- Computes daily **PnL**, cumulative **Portfolio_Value**, **Daily_Return**, and **Sharpe Ratio** (with a default annual **risk‑free** of 3%).  
-- Generates plots for prices, spread, and `Spread_z` time series.
+Visualizations include:
+- WTI vs Brent price chart
+- Spread and z-score over time
+- Cumulative PnL and portfolio value curves
 
-> **Note:** The provided script includes clearly marked placeholders (`...`) for parts that you may want to complete or customize (e.g., exact PnL math, contract sizing function, and explicit transaction cost accounting).
+## Installation & Dependencies
 
----
-
-## ## Installation
-
-```bash
-# Create and activate a virtual environment (recommended)
-python -m venv .venv
-source .venv/bin/activate    # Windows: .venv\Scripts\activate
-
-# Install core dependencies
-pip install numpy pandas matplotlib scipy statsmodels hmmlearn arch copulas
+Install the required packages:
+```
+pip install numpy pandas matplotlib scipy statsmodels arch hmmlearn copulas
+```
+Optional packages for visualization and statistical modeling may include:
+```
+pip install seaborn plotly
 ```
 
-> If you encounter platform‑specific wheels for `arch`, install with:  
-> `pip install arch==6.*` (or a compatible version for your OS/Python)
+## How to Run
 
----
+### Running the Python Script
+```
+python 6811finalproject.py
+```
 
-## ## How to Run
+### Running the Jupyter Notebook
+1. Open `Final_code_fre.ipynb` in Jupyter or VS Code.
+2. Execute cells sequentially to reproduce plots and metrics.
 
-1. Place `WTIData.csv` and `BrentData.csv` in the repository root (or update paths in the script).  
-2. Run the script:
-   ```bash
-   python finalproject.py
-   ```
-3. View generated plots and console output (e.g., **Sharpe ratio**).
+## Outputs
 
----
+The analysis produces:
+- **Spread time series** (WTI − Brent)
+- **Z-score series**
+- **Trading signals** (Buy/Sell/Hold)
+- **PnL and Portfolio Value** over time
+- **Performance summary table** with metrics
 
-## ## Expected Columns (after processing)
+## Limitations & Future Extensions
 
-The script produces these key columns in the merged `data` DataFrame:
+- **Incomplete backtesting logic**: Some placeholder sections require user-defined contract sizing and transaction cost functions.
+- **No volatility targeting**: Future versions could incorporate GARCH or realized volatility scaling.
+- **No position scaling**: Positions are binary (in/out). Enhancements could include dynamic sizing based on z-score magnitude.
+- **No leverage or margin consideration**: These can be added for realism.
+- **Possible regime modeling**: GaussianHMM or Markov-switching models could be extended for adaptive thresholds.
 
-- `WTI`, `Brent` – aligned price series (FFill where needed)  
-- `Spread` – price spread (`WTI − Brent`)  
-- `Log_Returns_WTI`, `Log_Returns_Brent`, `Returns_Spread` – daily return series  
-- `Spread_z` – z‑score of `Spread`  
-- `Regime` – `"High"` or `"Low"` dependency regime from HMM  
-- `Signal` – one of `{Buy Spread, Sell Spread, Hold}`  
-- `PnL`, `Portfolio_Value`, `Daily_Return` – backtest outputs (ensure placeholders are completed)  
+## Disclaimer
 
----
+This project is for **educational and research purposes only**. It does not constitute financial advice. Trading futures involves substantial risk of loss and is not suitable for all investors.
 
-## ## Plots
+## License
 
-- **WTI vs. Brent Price** time series  
-- **WTI–Brent Spread** time series  
-- **Spread z‑Score** time series (for visualizing signals / thresholds)
+MIT License — You are free to use, modify, and distribute this project with attribution.
 
----
-
-## ## Notes & To‑Dos
-
-- Some parts of the backtest are **stubbed** with placeholders (`...`) in `finalproject.py`.  
-  - Implement `calculate_contracts(price, cash)` to size positions.  
-  - Confirm **contract size** (e.g., 1,000 barrels per contract) and **tick value** for WTI/Brent.  
-  - Finish trade entry/exit PnL accounting (including transaction costs/slippage).  
-- Libraries imported but not fully used in the current script version (e.g., `arch`, `copulas`):  
-  - You can extend the model with **GARCH volatility** or **copula‑based dependence** if desired.  
-
----
-
-## ## Disclaimer
-
-This code is for **research and educational purposes** only and **not** investment advice. Futures trading involves significant risk of loss.
-
----
-
-## ## License
-
-**MIT License** — free to use, modify, and distribute with attribution.
+<img width="432" height="644" alt="image" src="https://github.com/user-attachments/assets/cee5ab5e-0327-4af1-8cf1-c8f541e4896a" />
