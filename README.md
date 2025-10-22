@@ -1,125 +1,148 @@
-# WTI–Brent Pairs Trading Strategy (6811finalproject.py & Final_code_fre.ipynb)
+# Option Pricing App (European, Asian, Barrier) — Streamlit
 
-This project implements a **pairs trading** strategy between **WTI** and **Brent crude oil futures** using a spread mean-reversion framework with potential extensions for volatility modeling and regime detection. Both the Python script (`6811finalproject.py`) and the Jupyter notebook (`Final_code_fre.ipynb`) contain equivalent methodologies, differing mainly in format (script vs notebook).
+This repository contains a **Streamlit** application and Python library for pricing options and computing **Greeks** using **Monte Carlo simulation** under a **Geometric Brownian Motion (GBM)** model. The app currently supports:
 
-## Project Overview
+- **European options** (calls & puts)
+- **Asian options** (arithmetic-average, calls & puts)
+- **Barrier options**:
+  - **Up-and-Out Call** (knock-out when price breaches barrier from below)
+  - **Down-and-In Put** (knock-in when price breaches barrier from above)
 
-The project aims to identify and exploit mean-reverting behavior in the **WTI–Brent spread**. It tests whether short-term deviations between the two highly correlated crude oil benchmarks can be traded profitably through a **statistical arbitrage** framework.
+It also provides **finite-difference Greeks** (Δ, Γ, Vega, Theta, Rho) and a simple **backtesting/portfolio** workflow.
 
+> Primary code reference: `6811finalproject.py` (Streamlit app with an `Option` class and pricing methods).  
+> The notebook `Final_code_fre.ipynb` includes environment/deployment helpers (e.g., launching Streamlit in Colab).
 
-### Approach
-1. Collect and preprocess historical price data for WTI and Brent futures.
-2. Compute the **spread** and **z-score normalization**.
-3. Identify trading signals when the z-score deviates significantly from zero.
-4. Backtest the strategy, accounting for position changes, transaction costs, and daily returns.
-5. Evaluate performance using metrics like Sharpe ratio, cumulative PnL, and portfolio value.
+---
 
-## Data Requirements
+## Features
 
-The project expects two input files:
-| File | Required Columns | Description |
-|------|------------------|--------------|
-| `WTIData.csv` | `Date`, `PX_LAST`, `FUT_CUR_GEN_TICKER` | WTI front-month or active crude oil futures prices |
-| `BrentData.csv` | `Date`, `PX_LAST`, `FUT_CUR_GEN_TICKER` | Brent front-month or active crude oil futures prices |
+### Pricing Methods
+- **Monte Carlo GBM** path simulation with risk-neutral discounting `exp(-r * T / day_counts)`.
+- **European payoff** at maturity \( T \):  
+  - Call: \( \max(S_T - K, 0) \)  
+  - Put: \( \max(K - S_T, 0) \)
+- **Asian payoff** using the **arithmetic average** over the simulated path.  
+- **Barrier options** (*path-dependent*):  
+  - **Up-and-Out Call**: option is knocked **out** if the simulated path **touches/exceeds** the barrier before expiry.  
+  - **Down-and-In Put**: option is **activated** only if the path **drops to/below** the barrier before expiry.
 
-Data should include daily prices and be formatted with consistent date indexes. Missing values are forward-filled. Data is filtered to start from **2021-01-01** or later.
+### Greeks (finite differences)
+- `calculate_delta()` — bump spot \( S_0 \) by \( \,\varepsilon \)
+- `calculate_gamma()` — second-order central difference in \( S_0 \)
+- `calculate_vega()` — bump volatility \( \sigma \)
+- `calculate_theta()` — bump time-to-maturity \( T \)
+- `calculate_rho()` — bump risk-free rate \( r \)
 
-## Methodology
+Each Greek re-prices with the same Monte Carlo routine to estimate the sensitivity.
 
-### 1. Preprocessing
-- Convert dates to datetime objects and align both datasets by date.
-- Forward-fill missing price data to maintain alignment.
-- Compute the **price spread** (`WTI − Brent`).
+### Streamlit UI
+- **Home** page for single-option pricing & Greeks  
+- **Portfolio Management** (maintains a list of options in session state)  
+- **Backtesting** (basic structure; sample hooks for historical runs)  
+- Inputs include: ticker (used for fetching spot or context), spot, strike, implied vol, time to maturity (trading days), rates, dividend yield, option style (call/put), and (for barrier types) barrier level.
 
-### 2. Stationarity and Co-Integration
-- The code may optionally perform Augmented Dickey-Fuller (ADF) tests to verify stationarity.
-- A regression of WTI on Brent (`WTI ~ α + β × Brent`) provides hedge ratio insight.
+---
 
-### 3. Z-Score Standardization
-- Compute z-score of the spread to identify deviations from the mean.
-- Z-score is calculated as:
-  ```
-  z = (spread - mean(spread)) / std(spread)
-  ```
+## Model Overview
 
-### 4. Signal Generation
-Trading signals are based on z-score thresholds:
-| Condition | Signal | Position |
-|------------|---------|-----------|
-| z > +2 | Sell Spread | Short WTI / Long Brent |
-| z < -2 | Buy Spread | Long WTI / Short Brent |
-| Otherwise | Hold | No trade |
+### GBM Dynamics
+Simulated under risk-neutral measure with continuous dividend yield \( q \):
+\[
+S_t = S_0\,\exp\Big((r - q - \tfrac{1}{2}\sigma^2)\,t + \sigma\,W_t\Big)
+\]
 
-Alternative thresholds (e.g., ±1.5) can be used for more frequent trades.
+Paths are generated over \( n \) steps with step size \( \Delta t = T / (\text{day\_counts}\cdot n) \) and payoffs discounted at \( e^{-r T / \text{day\_counts}} \).
 
-## Backtesting Logic
+> **Note**: Pricing accuracy is sensitive to the number of simulations and the time discretization used for path-dependent options.
 
-The backtest iterates through time, opening or closing positions based on signal changes. Key components include:
-- **Transaction Costs:** Deducted per trade (set as constants per leg).
-- **Position Sizing:** Optionally based on volatility or fixed capital allocation.
-- **Portfolio Tracking:** Tracks cash, open position value, and cumulative portfolio value.
-- **Performance Metrics:** Computes daily returns, Sharpe ratio, and cumulative profit/loss (PnL).
+---
 
-## Performance Evaluation
+## Installation
 
-The strategy computes several key performance indicators:
-- **Final Portfolio Value**
-- **Cumulative and Daily Returns**
-- **Sharpe Ratio** (with optional 3% annual risk-free rate)
-- **Max Drawdown**
-- **Win Rate**
-- **Trade Frequency and Average Holding Period** (if implemented)
+```bash
+# (recommended) create a fresh venv
+python -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
 
-Visualizations include:
-- WTI vs Brent price chart
-- Spread and z-score over time
-- Cumulative PnL and portfolio value curves
-
-## Installation & Dependencies
-
-Install the required packages:
+pip install -U pip
+pip install streamlit yfinance numpy pandas scipy matplotlib
 ```
-pip install numpy pandas matplotlib scipy statsmodels arch hmmlearn copulas
-```
-Optional packages for visualization and statistical modeling may include:
-```
-pip install seaborn plotly
-```
+
+> The app uses only widely available packages: `numpy`, `pandas`, `scipy`, `matplotlib`, `streamlit`, and `yfinance`.
+
+---
 
 ## How to Run
 
-### Running the Python Script
+```bash
+streamlit run 6811finalproject.py
 ```
-python 6811finalproject.py
+
+This launches the Streamlit UI in your browser (default: http://localhost:8501).
+
+---
+
+## Usage Notes
+
+- **Time to Maturity (`T`)**: The script treats `T` as **trading days** and uses `day_counts=252` by default. Adjust as needed.  
+- **Implied Volatility** is assumed to be annualized (e.g., `0.25` for 25%).  
+- **Dividend Yield (`q`)** is continuous-compounded.  
+- **Number of Simulations**: Increase for more stable estimates (e.g., `10,000+`) especially for barrier/Asian options.  
+- **Barriers**: Ensure you pass a valid `barrier` level for *Up-and-Out* and *Down-and-In* types.  
+- **Portfolio page**: Uses Streamlit session state to store multiple options and display aggregate results.
+
+---
+
+## File Map
+
+```
+.
+├── 6811finalproject.py      # Streamlit app + Option class (pricing + Greeks)
+├── Final_code_fre.ipynb     # Colab/launch helpers for Streamlit environment
+└── README.md                # This file
 ```
 
-### Running the Jupyter Notebook
-1. Open `Final_code_fre.ipynb` in Jupyter or VS Code.
-2. Execute cells sequentially to reproduce plots and metrics.
+---
 
-## Outputs
+## API (Option class)
 
-The analysis produces:
-- **Spread time series** (WTI − Brent)
-- **Z-score series**
-- **Trading signals** (Buy/Sell/Hold)
-- **PnL and Portfolio Value** over time
-- **Performance summary table** with metrics
+```python
+opt = Option(
+    option_type="european",     # "european" | "asian" | "up-and-out" | "down-and-in"
+    ticker="AAPL",
+    spot=175.0,
+    strike=180.0,
+    implied_vol=0.25,
+    T=63,                       # trading days to expiry
+    r=0.05,                     # annualized risk-free
+    q=0.00,                     # annualized dividend yield
+    day_counts=252,
+    call_option=True,           # True=Call, False=Put
+    position=1,                 # number of contracts/shares equivalent
+    barrier=None                # e.g., 210.0 (required for barrier types)
+)
 
-## Limitations & Future Extensions
+price = opt.price_option(num_simulations=10000)
+delta = opt.calculate_delta(num_simulations=10000)
+gamma = opt.calculate_gamma(num_simulations=10000)
+vega  = opt.calculate_vega(num_simulations=10000)
+theta = opt.calculate_theta(num_simulations=10000)
+rho   = opt.calculate_rho(num_simulations=10000)
+```
 
-- **Incomplete backtesting logic**: Some placeholder sections require user-defined contract sizing and transaction cost functions.
-- **No volatility targeting**: Future versions could incorporate GARCH or realized volatility scaling.
-- **No position scaling**: Positions are binary (in/out). Enhancements could include dynamic sizing based on z-score magnitude.
-- **No leverage or margin consideration**: These can be added for realism.
-- **Possible regime modeling**: GaussianHMM or Markov-switching models could be extended for adaptive thresholds.
+---
 
-## Disclaimer
+## Limitations & Extensions
 
-This project is for **educational and research purposes only**. It does not constitute financial advice. Trading futures involves substantial risk of loss and is not suitable for all investors.
+- **Discretization bias** for path-dependent options (Asian/Barrier) — consider finer time steps or exact formulas where available.  
+- **Variance reduction** techniques (Antithetic variates, Control variates) can materially reduce MC error.  
+- **Smile/Skew** not modeled — the current engine assumes a single constant volatility.  
+- **Alternative models**: GBM could be replaced or extended with local/stochastic volatility, jump diffusions, etc.  
+- **Calibration**: If you intend to calibrate \( \sigma \) or \( r \) from market data, add routines for fitting to vanilla surfaces.
+
+---
 
 ## License
 
-MIT License — You are free to use, modify, and distribute this project with attribution.
-
-<img width="432" height="644" alt="image" src="https://github.com/user-attachments/assets/cee5ab5e-0327-4af1-8cf1-c8f541e4896a" />
+MIT License — free to use, modify, and distribute with attribution.
